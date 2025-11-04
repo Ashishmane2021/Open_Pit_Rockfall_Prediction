@@ -1,0 +1,1611 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rockfall Risk Monitoring Dashboard</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #2D395B;
+            margin: 0;
+        }
+
+
+        .title-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 90px;
+            background: #0f62fe;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            text-align: center;
+            z-index: 1000;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, .1);
+        }
+
+        .title-bar h1 {
+            margin: 0;
+            font-size: 22px;
+            font-weight: bold;
+        }
+
+        .title-bar .subtitle {
+            margin: 0;
+            font-size: 14px;
+            font-weight: 400;
+            opacity: 0.9;
+        }
+
+        .sidebar {
+            top: 110px;
+            width: 240px;
+            background: #0F1B3D;
+            color: white;
+            position: fixed;
+            box-shadow: 2px 0 6px rgba(0, 0, 0, .1);
+        }
+
+        .sidebar .logo {
+            padding: 16px;
+            font-weight: bold;
+            color: #0f62fe;
+            border-bottom: 1px solid #ddd;
+        }
+
+        .nav-item {
+            display: block;
+            padding: 12px 16px;
+            border: none;
+            background: none;
+            color: white;
+            width: 100%;
+            text-align: left;
+            cursor: pointer;
+        }
+
+        .nav-item.active {
+            background: #0f62fe;
+            color: #fff;
+        }
+
+        .right-sidebar {
+            position: fixed;
+            top: 90px;
+            right: 0;
+            width: 110px;
+            height: calc(100vh - 90px);
+            background: #0F1B3D;
+            box-shadow: -2px 0 6px rgba(0, 0, 0, .1);
+            padding: 15px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .main-content {
+            margin-left: 240px;
+            padding: 20px;
+            margin-top: 90px;
+            margin-left: 240px;
+            padding: 20px;
+            background-color: #2D395B;
+        }
+
+        .zones-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            justify-content: center;
+            align-content: center;
+            margin-bottom: 20px;
+        }
+
+        .zone-card {
+            width: 200px;
+            height: 200px;
+            position: relative;
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+            border-radius: 50%;
+            box-shadow:
+                0 15px 30px rgba(0, 0, 0, 0.3),
+                inset 0 0 15px rgba(0, 0, 0, 0.2);
+            cursor: pointer;
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+        }
+
+        .zone-card:hover {
+            transform: translateY(-4px) scale(1.03);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .zone-inner-circle {
+            width: 120px;
+            height: 120px;
+            background: linear-gradient(135deg, #334155 0%, #1e293b 100%);
+            border-radius: 50%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.4);
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .zone-title {
+            color: #f1f5f9;
+            font-size: 18px;
+            font-weight: 400;
+            letter-spacing: 1px;
+            margin-bottom: 5px;
+        }
+
+        .zone-percentage {
+            color: #f1f5f9;
+            font-size: 22px;
+            font-weight: 600;
+        }
+
+        /* Fixed tick marks for zones */
+        .zone-tick-mark {
+            position: absolute;
+            width: 2px;
+            height: 20px;
+            background: #334155;
+            transform-origin: center bottom;
+            transition: all 0.3s ease;
+            /* Position ticks around the outer edge */
+            top: 5px;
+            left: 50%;
+            transform-origin: 1px 95px;
+            /* Center of circle (100px radius - 5px from top) */
+        }
+
+        .zone-tick-mark.active.green {
+            background: #10b981;
+            box-shadow: 0 0 8px #10b981;
+        }
+
+        .zone-tick-mark.active.yellow {
+            background: #f59e0b;
+            box-shadow: 0 0 8px #f59e0b;
+        }
+
+        .zone-tick-mark.active.orange {
+            background: #f97316;
+            box-shadow: 0 0 8px #f97316;
+        }
+
+        .zone-tick-mark.active.red {
+            background: #ef4444;
+            box-shadow: 0 0 8px #ef4444;
+        }
+
+        /* Right Sidebar Widgets */
+        .avg-risk-widget {
+            width: 60px;
+            height: 300px;
+            position: relative;
+            background: linear-gradient(180deg, #1e293b 0%, #0f172a 100%);
+            border-radius: 8px;
+            box-shadow:
+                0 8px 20px rgba(0, 0, 0, 0.4),
+                inset 0 0 10px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            padding: 10px;
+            box-sizing: border-box;
+            margin: 0 auto;
+        }
+
+        .avg-progress-area {
+            flex: 1;
+            position: relative;
+            margin-bottom: 20px;
+        }
+
+        .avg-tick-container {
+            position: absolute;
+            bottom: 0;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 40px;
+            height: 100%;
+            display: flex;
+            flex-direction: column-reverse;
+            justify-content: flex-start;
+            gap: 1px;
+        }
+
+        .avg-tick-mark {
+            width: 100%;
+            height: 7px;
+            background: #334155;
+            border-radius: 1px;
+            transition: all 0.3s ease;
+        }
+
+        .avg-tick-mark.active.green {
+            background: #10b981;
+            box-shadow: 0 0 8px #10b981;
+        }
+
+        .avg-tick-mark.active.yellow {
+            background: #f59e0b;
+            box-shadow: 0 0 8px #f59e0b;
+        }
+
+        .avg-tick-mark.active.orange {
+            background: #f97316;
+            box-shadow: 0 0 8px #f97316;
+        }
+
+        .avg-tick-mark.active.red {
+            background: #ef4444;
+            box-shadow: 0 0 8px #ef4444;
+        }
+
+        .avg-info-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .avg-percentage-text {
+            color: #f1f5f9;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .avg-label {
+            color: #94a3b8;
+            font-size: 12px;
+            font-weight: 400;
+            text-align: center;
+        }
+
+        .light-status-widget {
+            background: linear-gradient(135deg, #334155 0%, #1e293b 100%);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .light-status-display {
+            font-size: 48px;
+            margin: 10px 0;
+        }
+
+        .light-label {
+            color: #94a3b8;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+
+        .light_container {
+            display: flex;
+            justify-content: space-around;
+        }
+
+        .l_options {
+            width: 20px;
+            border-radius: 50%;
+            height: 20px;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+            margin: 0 2px;
+        }
+
+        .l_options:hover {
+            transform: scale(1.1);
+        }
+
+        #red_l {
+            background-color: #ef4444;
+        }
+
+        #orange_l {
+            background-color: #f59e0b;
+        }
+
+        #green_l {
+            background-color: #10b981;
+        }
+
+        #quickResult {
+            background-color: #2D395B;
+            color: white;
+        }
+
+        #ollamaResult {
+            background-color: #2D395B;
+            color: #2D395B;
+        }
+
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px
+        }
+
+        .chart-item {
+            background: #fff;
+            padding: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, .1)
+        }
+
+        .chart-item.fullscreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1000;
+            background: #fff;
+            padding: 30px
+        }
+
+        .chart-item.fullscreen canvas {
+            width: 100% !important;
+            height: 100% !important
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+            background: #fff;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column
+        }
+
+        .form-group label {
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 3px
+        }
+
+        .form-group input,
+        .form-group select {
+            padding: 6px 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px
+        }
+
+        .section {
+            display: none
+        }
+
+        .section.active {
+            display: block
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #fff;
+            margin-top: 10px
+        }
+
+        th,
+        td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center
+        }
+
+        th {
+            background: #f3f4f6
+        }
+
+        .light_change {
+            display: block;
+        }
+
+        .btn-primary {
+            background: #0f62fe;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .btn-secondary {
+            background: #6b7280;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+    <header class="title-bar">
+        <div class="title-content">
+            <h1>⛰️ Rockfall Risk Monitoring by VIDYUT </h1>
+            <p class="subtitle">Predict before it occurs</p>
+        </div>
+    </header>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="logo"> RockRisk V1</div>
+        <button class="nav-item active" onclick="showSection('dashboard',this)">Dashboard</button>
+        <button class="nav-item" onclick="showSection('analytics',this)">Analytics</button>
+        <button class="nav-item" onclick="showSection('lidar', this)">3D Model</button>
+        <button class="nav-item" onclick="showSection('image', this)">Image Analysis</button>
+        <button class="nav-item" onclick="showSection('batch',this)">Batch Processing</button>
+        <button class="nav-item" onclick="showSection('settings',this)">Settings</button>
+        <button class="nav-item" onclick="showSection('emergency',this)">Emergency</button>
+
+    </div>
+
+    <div class="right-sidebar">
+        <!-- Average Risk Widget -->
+        <div>
+            <div class="avg-risk-widget">
+                <div class="avg-progress-area">
+                    <div class="avg-tick-container" id="avgTickContainer">
+                        <!-- Ticks will be generated here -->
+                    </div>
+                </div>
+
+                <div class="avg-info-section">
+                    <div class="avg-percentage-text" id="averageRisk">45%</div>
+                    <div class="avg-label">Average Risk</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Light Status Widget -->
+        <div class="light-status-widget">
+            <div class="light-label">Light Status</div>
+            <div class="light-status-display" id="lightStatus">🟢</div>
+            <div class="light_container">
+                <div class="l_options" id="green_l" onclick="setLightStatus('🟢', 'green')"></div>
+                <div class="l_options" id="orange_l" onclick="setLightStatus('🟡', 'orange')"></div>
+                <div class="l_options" id="red_l" onclick="setLightStatus('🔴', 'red')"></div>
+            </div>
+        </div>
+    </div>
+    <!-- Main -->
+    <div class="main-content">
+        <!-- Dashboard -->
+        <div id="dashboard" class="section active">
+
+            <div class="zones-grid">
+                <div class="zone-card" id="zoneA" onclick="showZoneHistory('A')">
+                    <div class="zone-inner-circle">
+                        <div class="zone-title">Zone A</div>
+                        <div class="zone-percentage" id="circleA">0%</div>
+                    </div>
+                    <div id="zoneATickContainer"></div>
+                </div>
+
+                <div class="zone-card" id="zoneB" onclick="showZoneHistory('B')">
+                    <div class="zone-inner-circle">
+                        <div class="zone-title">Zone B</div>
+                        <div class="zone-percentage" id="circleB">0%</div>
+                    </div>
+                    <div id="zoneBTickContainer"></div>
+                </div>
+
+                <div class="zone-card" id="zoneC" onclick="showZoneHistory('C')">
+                    <div class="zone-inner-circle">
+                        <div class="zone-title">Zone C</div>
+                        <div class="zone-percentage" id="circleC">0%</div>
+                    </div>
+                    <div id="zoneCTickContainer"></div>
+                </div>
+
+                <div class="zone-card" id="zoneD" onclick="showZoneHistory('D')">
+                    <div class="zone-inner-circle">
+                        <div class="zone-title">Zone D</div>
+                        <div class="zone-percentage" id="circleD">0%</div>
+                    </div>
+                    <div id="zoneDTickContainer"></div>
+                </div>
+            </div>
+            <div id="zoneHistory" style="margin-top:20px;"></div>
+
+            <!-- Manual Entry Form -->
+            <div class="form-grid">
+                <div class="form-group"><label>Zone</label><select id="quickZone">
+                        <option>A</option>
+                        <option>B</option>
+                        <option>C</option>
+                        <option>D</option>
+                    </select></div>
+                <div class="form-group"><label>Depth (m)</label><input type="number" id="depth_m"></div>
+                <div class="form-group"><label>Moisture (%)</label><input type="number" id="moisture_percent"></div>
+                <div class="form-group"><label>Slope (°)</label><input type="number" id="slope_angle_deg"></div>
+                <div class="form-group"><label>Density (g/cm³)</label><input type="number" id="rock_density_gcm3">
+                </div>
+                <div class="form-group"><label>Seismic Zone</label><input type="number" id="seismic_zone"></div>
+                <div class="form-group"><label>Water Dist (m)</label><input type="number" id="distance_from_water_m">
+                </div>
+                <div class="form-group"><label>Pressure (kPa)</label><input type="number" id="pore_pressure_kPa">
+                </div>
+                <div class="form-group"><button class="btn-primary" onclick="quickPredict()">Predict</button></div>
+                <div class="form-group">
+                    <button class="btn-secondary" onclick="analyzeWithOllama()">AI Safety Protocol</button>
+                </div>
+            </div>
+            <div id="ollamaResult" style="margin-top:15px; background:#fff; padding:10px; border-radius:6px;"></div>
+            <div id="quickResult"></div>
+        </div>
+
+        <!-- Analytics -->
+        <div id="analytics" class="section">
+            <h2>Analytics</h2>
+            <input type="file" id="csvFile" accept=".csv">
+            <button class="btn-primary" onclick="uploadCSV()">Upload</button><br><br>
+            <label>X:</label><select id="xParam">
+                <option value="depth">Depth</option>
+                <option value="moisture">Moisture</option>
+                <option value="slope">Slope</option>
+                <option value="density">Density</option>
+                <option value="water">Water</option>
+                <option value="pressure">Pressure</option>
+                <option value="risk_prob">Risk</option>
+            </select>
+            <label>Y:</label><select id="yParam">
+                <option value="risk_prob">Risk</option>
+                <option value="depth_m">Depth</option>
+                <option value="moisture_percent">Moisture</option>
+                <option value="slope_angle_deg">Slope</option>
+                <option value="rock_density_gcm3">Density</option>
+                <option value="seismic_zone">Seismic Zone</option>
+                <option value="distance_from_water_m">Water Dist</option>
+                <option value="pore_pressure_kPa">Pressure</option>
+            </select>
+            <button class="btn-secondary" onclick="plotNewChart()">Plot Graph</button>
+            <div id="chartsGrid" class="charts-grid"></div>
+            <div style="text-align:center;margin-top:20px;">
+                <button class="btn-primary" onclick="downloadAllPNG()">Download All PNG</button>
+                <button class="btn-primary" onclick="downloadAllPDF()">Download All PDF</button>
+            </div>
+        </div>
+        <!-- LIDAR / 3D section: replace the entire existing lidar block with this -->
+        <div id="lidar" class="section">
+            <h2>3D Mine Model (LiDAR / Drone)</h2>
+
+            <!-- ✅ NOT wrapped in <form> tags -->
+            <div style="margin-bottom:10px;">
+                <input type="file" id="pcFile" accept=".ply" />
+                <button type="button" id="uploadPlyBtn" class="btn-primary">Upload & Process</button>
+            </div>
+
+            <div id="viewerContainer" style="width:100%; height:600px; background:#111;"></div>
+            <div id="pcInfo" style="margin-top:10px; color:#fff;"></div>
+        </div>
+
+        <!-- Image Analysis -->
+        <div id="image" class="section">
+            <h2>Surface Image Analyzer (Cracks & Moisture)</h2>
+            <input type="file" id="imgFile" accept="image/*" />
+            <button class="btn-primary" id="uploadImgBtn">Upload & Analyze</button>
+
+            <div id="imgResult" style="margin-top:20px; color:white;"></div>
+            <img id="processedImg" style="max-width:100%; margin-top:10px; display:none; border-radius:6px;" />
+        </div>
+
+
+
+        <!-- Batch -->
+        <div id="batch" class="section">
+            <h2>Batch Processing</h2>
+            <input type="file" id="batchFile" accept=".csv">
+            <button class="btn-primary" onclick="processBatch()">Process</button>
+            <div id="batchResults"></div>
+        </div>
+
+        <!-- Settings -->
+        <div id="settings" class="section">
+            <h2>Settings</h2>
+            <div class="light_container">
+                <div class="Light_change">
+                    <h3>Switch Light colour:</h3>
+                </div>
+                <button class="l_options" id="red_l" onclick="setLightStatus('🔴', 'red')"
+                    style="background-color: #ef4444; border: none; cursor: pointer;">Red</button>
+                <button class="l_options" id="orange_l" onclick="setLightStatus('🟡', 'orange')"
+                    style="background-color: #f59e0b; border: none; cursor: pointer;">Orange</button>
+                <button class="l_options" id="green_l" onclick="setLightStatus('🟢', 'green')"
+                    style="background-color: #10b981; border: none; cursor: pointer;">Green</button>
+            </div>
+        </div>
+
+        <!-- Emergency -->
+        <div id="emergency" class="section">
+            <h2>Emergency Contacts</h2>
+            <p>🚨 Call: 911</p>
+            <p>🚨 Call: zone A controller</p>
+            <p>🚨 Call: zone B controller</p>
+            <p>🚨 Call: zone C controller</p>
+            <p>🚨 Call: zone D controller</p>
+        </div>
+    </div>
+    <script>
+        let currentData = [];
+        let batchResults = [];
+        let chartInstances = [];
+        let chartIdCounter = 0;
+
+        let isManualLightControl = false;
+        let currentLightColor = "green";
+        let zoneTickElements = { A: [], B: [], C: [], D: [] };
+        let avgTickElements = [];
+        const CANONICAL_KEYS = [
+            "depth_m",
+            "moisture_percent",
+            "slope_angle_deg",
+            "rock_density_gcm3",
+            "seismic_zone",
+            "distance_from_water_m",
+            "pore_pressure_kPa",
+            "zone",
+            "risk_prob"
+        ];
+
+        // mapping friendly dropdown values to canonical keys (xParam values like 'depth' -> depth_m)
+        const paramKeyMap = {
+            depth: ["depth_m", "depth"],
+            moisture: ["moisture_percent", "moisture", "moisture_%", "moisture%"],
+            slope: ["slope_angle_deg", "slope", "slope_deg", "slope_angle"],
+            density: ["rock_density_gcm3", "density", "rock_density"],
+            water: ["distance_from_water_m", "water", "distance_from_water", "water_distance"],
+            pressure: ["pore_pressure_kPa", "pore_pressure", "pressure", "p_kpa"],
+            seismic: ["seismic_zone", "seismic"],
+            risk_prob: ["risk_prob", "risk", "risk%", "risk_percent"]
+        };
+
+        // Create tick marks for zone circles - FIXED VERSION
+        function createZoneTickMarks(zone) {
+            const container = document.getElementById(`zone${zone}TickContainer`);
+            const totalTicks = 100;
+
+            for (let i = 0; i < totalTicks; i++) {
+                const tick = document.createElement('div');
+                tick.className = 'zone-tick-mark';
+
+                // Calculate angle for this tick (360 degrees / 100 ticks = 3.6 degrees per tick)
+                const angle = i * 3.6;
+
+                // Position and rotate each tick
+                tick.style.transform = `translateX(-50%) rotate(${angle}deg)`;
+
+                container.appendChild(tick);
+                zoneTickElements[zone].push(tick);
+            }
+        }
+
+        // Create tick marks for average risk vertical widget
+        function createAvgTickMarks() {
+            const container = document.getElementById('avgTickContainer');
+            const totalTicks = 25;
+
+            for (let i = 0; i < totalTicks; i++) {
+                const tick = document.createElement('div');
+                tick.className = 'avg-tick-mark';
+                container.appendChild(tick);
+                avgTickElements.push(tick);
+            }
+        }
+
+        // Update zone widget
+        function updateZoneWidget(zone, percentage) {
+            document.getElementById(`circle${zone}`).textContent = percentage + '%';
+
+            // Reset all ticks for this zone
+            zoneTickElements[zone].forEach(tick => {
+                tick.classList.remove('active', 'green', 'yellow', 'orange', 'red');
+            });
+
+            // Determine color based on percentage
+            let colorClass = '';
+            if (percentage >= 0 && percentage <= 25) {
+                colorClass = 'green';
+            } else if (percentage > 25 && percentage <= 50) {
+                colorClass = 'yellow';
+            } else if (percentage > 50 && percentage <= 75) {
+                colorClass = 'orange';
+            } else if (percentage > 75 && percentage <= 100) {
+                colorClass = 'red';
+            }
+
+            // Calculate how many ticks to light up
+            const ticksToLight = Math.round((percentage / 100) * 100);
+
+            // Light up the appropriate ticks with the correct color
+            for (let i = 0; i < ticksToLight; i++) {
+                zoneTickElements[zone][i].classList.add('active', colorClass);
+            }
+        }
+
+        // Update average risk widget
+        function updateAvgRiskWidget(percentage) {
+            document.getElementById('averageRisk').textContent = percentage + '%';
+
+            // Reset all ticks
+            avgTickElements.forEach(tick => {
+                tick.classList.remove('active', 'green', 'yellow', 'orange', 'red');
+            });
+
+            // Determine color based on percentage
+            let colorClass = '';
+            if (percentage >= 0 && percentage <= 25) {
+                colorClass = 'green';
+            } else if (percentage > 25 && percentage <= 50) {
+                colorClass = 'yellow';
+            } else if (percentage > 50 && percentage <= 75) {
+                colorClass = 'orange';
+            } else if (percentage > 75 && percentage <= 100) {
+                colorClass = 'red';
+            }
+
+            // Calculate how many ticks to light up
+            const ticksToLight = Math.round((percentage / 100) * avgTickElements.length);
+
+            // Light up the appropriate ticks with the correct color (from bottom)
+            for (let i = 0; i < ticksToLight; i++) {
+                avgTickElements[i].classList.add('active', colorClass);
+            }
+        }
+
+        // Set light status
+        function setLightStatus(emoji, color) {
+            document.getElementById('lightStatus').textContent = emoji;
+            currentLightColor = color;
+        }
+
+        // Utility: show section and toggle nav active
+        function showSection(sectionId, btn) {
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            const s = document.getElementById(sectionId);
+            if (s) s.classList.add('active');
+            if (btn) btn.classList.add('active');
+        }
+        // Utility: normalize CSV header to canonical key if possible
+        function mapHeaderToCanonical(header) {
+            if (!header) return null;
+            const h = header.trim().toLowerCase().replace(/\s+/g, "_");
+            // direct match
+            if (CANONICAL_KEYS.includes(h)) return h;
+            // search paramKeyMap values
+            for (const [friendly, arr] of Object.entries(paramKeyMap)) {
+                for (const candidate of arr) {
+                    if (candidate.toLowerCase() === h) return arr[0]; // return canonical first entry
+                }
+            }
+            // try partial matches
+            if (h.includes("depth")) return "depth_m";
+            if (h.includes("moisture")) return "moisture_percent";
+            if (h.includes("slope")) return "slope_angle_deg";
+            if (h.includes("density") || h.includes("rock_density")) return "rock_density_gcm3";
+            if (h.includes("seismic")) return "seismic_zone";
+            if (h.includes("water") || h.includes("distance")) return "distance_from_water_m";
+            if (h.includes("pressure") || h.includes("pore")) return "pore_pressure_kPa";
+            if (h.includes("zone")) return "zone";
+            return null;
+        }
+
+        // Utility: get a numeric value for a given canonical key from a parsed row object
+        function getCanonicalValue(rowObj, canonicalKey) {
+            if (!rowObj) return 0;
+            // try direct
+            if (rowObj[canonicalKey] !== undefined && rowObj[canonicalKey] !== "") {
+                const v = parseFloat(rowObj[canonicalKey]);
+                return isNaN(v) ? 0 : v;
+            }
+            // fallback: try other variants in paramKeyMap
+            for (const [friendly, arr] of Object.entries(paramKeyMap)) {
+                if (arr[0] === canonicalKey || arr.includes(canonicalKey)) {
+                    for (const candidate of arr) {
+                        if (rowObj[candidate] !== undefined && rowObj[candidate] !== "") {
+                            const v = parseFloat(rowObj[candidate]);
+                            return isNaN(v) ? 0 : v;
+                        }
+                    }
+                }
+            }
+            return 0;
+        }
+        function updateZoneDisplay(zone, riskPercent) {
+            const card = document.getElementById(`zone${zone}`);
+            const circle = document.getElementById(`circle${zone}`);
+            if (!card || !circle) return;
+
+            circle.textContent = `${riskPercent.toFixed(2)}%`;
+
+            card.classList.remove('low', 'medium', 'high');
+            circle.classList.remove('low', 'medium', 'high');
+
+            if (riskPercent < 50) { card.classList.add('low'); circle.classList.add('low'); }
+            else if (riskPercent < 75) { card.classList.add('medium'); circle.classList.add('medium'); }
+            else { card.classList.add('high'); circle.classList.add('high'); startSiren(); }
+
+            // update stats
+            updateDashboardStats();
+            triggerEmergencyAlert(zone, riskPercent);
+        }
+        function updateDashboardStats() {
+            const risks = currentData.map(d => (typeof d.risk_prob === 'number' ? d.risk_prob * 100 : 0));
+            const avg = risks.length ? (risks.reduce((a, b) => a + b, 0) / risks.length) : 0;
+            const highZones = risks.filter(r => r > 75).length;
+            const avgEl = document.getElementById('averageRisk');
+            if (avgEl) avgEl.textContent = avg.toFixed(1) + "%";
+
+            if (!isManualLightControl) {
+                const maxRisk = risks.length ? Math.max(...risks) : 0;
+                updateLightStatus(maxRisk);
+            }
+        }
+
+        // Light & siren logic (safe console logs for hardware hooking)
+        function updateLightStatus(riskLevel) {
+            let newColor = 'green', emoji = '🟢', bg = '#10b981';
+            if (riskLevel >= 75) { newColor = 'red'; emoji = '🔴'; bg = '#ef4444'; }
+            else if (riskLevel >= 50) { newColor = 'orange'; emoji = '🟠'; bg = '#f59e0b'; }
+
+            if (newColor !== currentLightColor) {
+                console.log(`Light color changed to: ${newColor.toUpperCase()}`);
+                currentLightColor = newColor;
+                if (newColor === 'red') startSiren(); else stopSiren();
+            }
+            const ls = document.getElementById('lightStatus');
+            if (ls) ls.textContent = emoji;
+            // graceful set background if element exists
+            try {
+                const icon = document.querySelector('#lightStatusCard .stat-icon');
+                if (icon) icon.style.background = bg;
+            } catch (e) { /* ignore */ }
+        }
+        function manualLightChange() {
+            const control = document.getElementById('manualLightControl').value;
+            if (control === 'auto') { isManualLightControl = false; updateDashboardStats(); }
+            else { isManualLightControl = true; const risk = control === 'red' ? 85 : control === 'orange' ? 60 : 10; updateLightStatus(risk); }
+        }
+        function startSiren() { console.log('🚨 SIREN START (console).'); }
+        function stopSiren() { console.log('✅ SIREN STOP (console).'); }
+        function testSiren() { startSiren(); }
+
+
+
+        // Show history when zone card clicked
+        function showZoneHistory(zone) {
+            const history = zoneHistoryData[zone] || [];
+            const container = document.getElementById("zoneHistory");
+
+            if (!history.length) {
+                container.innerHTML = `<p>No history yet for Zone ${zone}.</p>`;
+                return;
+            }
+
+            let html = `<h3>Zone ${zone} History</h3><table>
+                <tr><th>Time</th><th>Risk (%)</th></tr>`;
+            history.slice(-10).reverse().forEach(entry => {
+                let color = entry.risk > 75 ? "red" : entry.risk > 50 ? "orange" : "green";
+                html += `<tr>
+               <td>${entry.time}</td>
+               <td style="color:${color}; font-weight:bold;">${entry.risk.toFixed(1)}%</td>
+             </tr>`;
+            });
+            html += "</table>";
+            container.innerHTML = html;
+        }
+        let zoneHistoryData = { A: [], B: [], C: [], D: [] };
+        async function quickPredict() {
+            const zone = document.getElementById("quickZone").value;
+            const data = {
+                depth_m: parseFloat(document.getElementById("depth_m").value),
+                moisture_percent: parseFloat(document.getElementById("moisture_percent").value),
+                slope_angle_deg: parseFloat(document.getElementById("slope_angle_deg").value),
+                rock_density_gcm3: parseFloat(document.getElementById("rock_density_gcm3").value),
+                seismic_zone: parseInt(document.getElementById("seismic_zone").value),
+                distance_from_water_m: parseFloat(document.getElementById("distance_from_water_m").value),
+                pore_pressure_kPa: parseFloat(document.getElementById("pore_pressure_kPa").value), // ✅ correct field name
+                zone: zone  // ✅ required by backend
+            };
+
+            console.log("Payload being sent:", JSON.stringify(data, null, 2));
+
+            try {
+                const res = await fetch("http://127.0.0.1:8000/predict", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(data)
+                });
+
+                if (!res.ok) {
+                    const errorText = await res.text();
+                    throw new Error(`API error: ${res.status} - ${errorText}`);
+                }
+
+                const result = await res.json();
+                const risk = (result.risk_prob * 100);
+
+                // ✅ update zone card + history
+                updateZoneDisplay(zone, risk);
+                updateZoneWidget(zone, risk);
+                currentData.push({ ...data, risk_prob: result.risk_prob });
+
+                const timestamp = new Date().toLocaleString();
+                if (!zoneHistoryData[zone]) zoneHistoryData[zone] = [];
+                zoneHistoryData[zone].push({ time: timestamp, risk });
+
+                document.getElementById("quickResult").style.display = "block";
+                document.getElementById("quickResult").innerHTML =
+                    `<p><b>Zone ${zone}:</b> ${risk.toFixed(2)}% risk probability</p>`;
+            } catch (err) {
+                console.error("Prediction failed:", err);
+                alert("Prediction failed. Check console for details.");
+            }
+        }
+
+        async function analyzeWithOllama() {
+            const zone = document.getElementById("quickZone").value;
+            const data = {
+                depth_m: parseFloat(document.getElementById("depth_m").value),
+                moisture_percent: parseFloat(document.getElementById("moisture_percent").value),
+                slope_angle_deg: parseFloat(document.getElementById("slope_angle_deg").value),
+                rock_density_gcm3: parseFloat(document.getElementById("rock_density_gcm3").value),
+                seismic_zone: parseInt(document.getElementById("seismic_zone").value),
+                distance_from_water_m: parseFloat(document.getElementById("distance_from_water_m").value),
+                pore_pressure_kPa: parseFloat(document.getElementById("pore_pressure_kPa").value),
+                zone: zone
+            };
+
+            try {
+                const res = await fetch("http://127.0.0.1:8000/analyze_and_predict", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(data)
+                });
+
+                if (!res.ok) {
+                    const errorText = await res.text();
+                    throw new Error(`API error: ${res.status} - ${errorText}`);
+                }
+
+                const result = await res.json();
+
+                document.getElementById("ollamaResult").innerHTML = `
+            <h3>🤖 Rockfall Analyst Report</h3>
+            <p><b>Risk Probability:</b> ${(result.risk_prob * 100).toFixed(2)}%</p>
+            <div style="white-space:pre-line;">${result.safety_protocol}</div>
+        `;
+            } catch (err) {
+                console.error("Ollama analysis failed:", err);
+                alert("AI analysis failed. Check console for details.");
+            }
+        }
+
+        // CSV upload -> parse -> call backend for each row -> populate currentData
+        function uploadCSV() {
+            const f = document.getElementById('csvFile')?.files?.[0];
+            if (!f) { alert('Select CSV file'); return; }
+            const reader = new FileReader();
+            reader.onload = (e) => parseCSVAndPredict(e.target.result);
+            reader.readAsText(f);
+        }
+
+        async function parseCSVAndPredict(text) {
+            const lines = text.trim().split(/\r?\n/).filter(l => l.trim() !== '');
+            if (lines.length < 2) { alert('CSV needs header + rows'); return; }
+
+            // Parse header and map to canonical keys
+            const rawHeaders = lines.shift().split(',').map(h => h.trim());
+            const headerMap = rawHeaders.map(h => ({ raw: h, key: mapHeaderToCanonical(h) || h.toLowerCase().replace(/\s+/g, '_') }));
+
+            // Build rows as key:value using canonical names
+            currentData = [];
+            for (const line of lines) {
+                const cells = line.split(',').map(c => c.trim());
+                let parsed = {};
+                headerMap.forEach((h, i) => {
+                    parsed[h.key] = cells[i] !== undefined ? cells[i] : "";
+                });
+
+                // Build payload to backend using canonical names required by app.py
+                const payload = {
+                    depth_m: parseFloat(parsed.depth_m || parsed.depth || 0),
+                    moisture_percent: parseFloat(parsed.moisture_percent || parsed.moisture || 0),
+                    slope_angle_deg: parseFloat(parsed.slope_angle_deg || parsed.slope || 0),
+                    rock_density_gcm3: parseFloat(parsed.rock_density_gcm3 || parsed.density || 0),
+                    seismic_zone: parseInt(parsed.seismic_zone || parsed.seismic || parsed.seismic_zone || 1),
+                    distance_from_water_m: parseFloat(parsed.distance_from_water_m || parsed.water || parsed.distance || 0),
+                    pore_pressure_kPa: parseFloat(parsed.pore_pressure_kPa || parsed.pore_pressure_kpa || parsed.pressure || 0),
+                    zone: (parsed.zone || parsed.Zone || 'A').toString().toUpperCase()
+                };
+
+                try {
+                    const res = await fetch("http://127.0.0.1:8000/predict", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload)
+                    });
+                    if (res.ok) {
+                        const json = await res.json();
+                        currentData.push({ ...payload, risk_prob: (typeof json.risk_prob === 'number') ? json.risk_prob : parseFloat(json.risk_prob) || 0 });
+                    } else {
+                        console.warn('API returned', res.status);
+                        currentData.push({ ...payload, risk_prob: 0 });
+                    }
+                } catch (err) {
+                    console.error('Predict error', err);
+                    currentData.push({ ...payload, risk_prob: 0 });
+                }
+            }
+
+            console.log('currentData (after predictions):', currentData);
+            // Optionally auto-plot first chart or update dashboard zones based on rows' zone field:
+            currentData.forEach(d => { if (d.zone) updateZoneDisplay(d.zone, (d.risk_prob || 0) * 100); });
+            updateDashboardStats();
+        }
+
+        // Get numeric value for plotting a selected parameter (x or y)
+        function getValueForParam(d, selectedParam) {
+            // if selectedParam is already a canonical key (contains underscore), try direct
+            if (selectedParam.includes('_')) {
+                if (selectedParam === 'risk_prob') return (d.risk_prob || 0) * 100;
+                return parseFloat(d[selectedParam] || 0);
+            }
+
+            // else use paramKeyMap to find the best matching canonical key in the data row
+            const candidates = paramKeyMap[selectedParam] || [selectedParam];
+            for (const candidate of candidates) {
+                // candidate may be canonical like 'depth_m' or friendly like 'depth'
+                if (d[candidate] !== undefined) {
+                    // risk special handling
+                    if (candidate === 'risk_prob') return (d.risk_prob || 0) * 100;
+                    const v = parseFloat(d[candidate]);
+                    if (!isNaN(v)) return v;
+                }
+            }
+
+            // fallback: try direct canonical names
+            for (const key of CANONICAL_KEYS) {
+                if (d[key] !== undefined) {
+                    if (key === 'risk_prob') return (d.risk_prob || 0) * 100;
+                    const v = parseFloat(d[key]);
+                    if (!isNaN(v)) return v;
+                }
+            }
+
+            return 0;
+        }
+
+        // Plot a new chart (multi-chart support)
+        function plotNewChart() {
+            if (!currentData || currentData.length === 0) { alert('Upload CSV and wait for predictions first'); return; }
+
+            const xSelect = document.getElementById('xParam');
+            const ySelect = document.getElementById('yParam');
+            const xParam = xSelect ? xSelect.value : 'depth';
+            const yParam = ySelect ? ySelect.value : 'risk_prob';
+
+            chartIdCounter++;
+            const chartId = `chart_${chartIdCounter}`;
+
+            // create container
+            const div = document.createElement('div');
+            div.className = 'chart-item';
+            div.id = chartId;
+            div.innerHTML = `<canvas id="canvas_${chartId}"></canvas>`;
+            document.getElementById('chartsGrid').appendChild(div);
+
+            // prepare data
+            const xs = currentData.map(d => getValueForParam(d, xParam));
+            const ys = currentData.map(d => getValueForParam(d, yParam));
+
+            // remove points where both x and y are zero to avoid flatline
+            const points = xs.map((x, i) => ({ x: (isFinite(x) ? x : 0), y: (isFinite(ys[i]) ? ys[i] : 0) }));
+
+            const ctx = document.getElementById(`canvas_${chartId}`).getContext('2d');
+            const dataset = {
+                label: `${yParam} vs ${xParam}`,
+                data: points,
+                pointRadius: 5,
+                backgroundColor: points.map(p => p.y > 70 ? '#dc2626' : p.y > 40 ? '#f59e0b' : '#16a34a'),
+                borderColor: '#ff8c42',
+                showLine: false
+            };
+
+            const chart = new Chart(ctx, {
+                type: 'scatter',
+                data: { datasets: [dataset] },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { title: { display: true, text: `${yParam} vs ${xParam}` } },
+                    scales: {
+                        x: { title: { display: true, text: xParam } },
+                        y: { title: { display: true, text: yParam } }
+                    }
+                }
+            });
+
+            chartInstances.push({ id: chartId, instance: chart });
+
+            // double-click to toggle fullscreen
+            let clicks = 0;
+            div.addEventListener('click', e => {
+                clicks++;
+                setTimeout(() => {
+                    if (clicks === 2) toggleFullscreen(chartId);
+                    clicks = 0;
+                }, 250);
+            });
+        }
+
+        // Fullscreen helpers
+        function toggleFullscreen(chartId) {
+            const el = document.getElementById(chartId);
+            if (!el) return;
+            el.classList.toggle('fullscreen');
+            const chartObj = chartInstances.find(c => c.id === chartId);
+            if (chartObj && chartObj.instance) setTimeout(() => chartObj.instance.resize(), 80);
+        }
+
+        // download all charts as PNG
+        function downloadAllPNG() {
+            if (!chartInstances.length) { alert('No charts to download'); return; }
+            chartInstances.forEach((c, i) => {
+                try {
+                    const a = document.createElement('a');
+                    a.href = c.instance.toBase64Image();
+                    a.download = `rockfall_chart_${i + 1}.png`;
+                    a.click();
+                } catch (err) { console.warn('Download PNG error', err); }
+            });
+        }
+
+        // download all charts into a PDF (simple single-image-per-page layout)
+        function downloadAllPDF() {
+            if (!chartInstances.length) { alert('No charts to download'); return; }
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF();
+            chartInstances.forEach((c, i) => {
+                if (i > 0) pdf.addPage();
+                try { pdf.addImage(c.instance.toBase64Image(), 'PNG', 15, 40, 180, 100); }
+                catch (err) { console.warn('PDF image add failed', err); }
+            });
+            pdf.save('rockfall_charts_report.pdf');
+        }
+
+        // 3D viewer globals
+        let scene3d, camera3d, renderer3d, controls3d, currentPointsObj;
+
+        function init3D() {
+            const container = document.getElementById('viewerContainer');
+            if (renderer3d && renderer3d.domElement) {
+                container.removeChild(renderer3d.domElement);
+            }
+
+            scene3d = new THREE.Scene();
+            scene3d.background = new THREE.Color(0x111111);
+
+            camera3d = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.1, 5000);
+            camera3d.position.set(0, -50, 50);
+
+            renderer3d = new THREE.WebGLRenderer({ antialias: true });
+            renderer3d.setSize(container.clientWidth, container.clientHeight);
+            container.appendChild(renderer3d.domElement);
+
+            // ✅ Use THREE.OrbitControls
+            controls3d = new THREE.OrbitControls(camera3d, renderer3d.domElement);
+            controls3d.target.set(0, 0, 0);
+
+            const light = new THREE.DirectionalLight(0xffffff, 1.0);
+            light.position.set(0.5, -1, 1);
+            scene3d.add(light);
+            scene3d.add(new THREE.AmbientLight(0x404040));
+
+            const axes = new THREE.AxesHelper(10);
+            scene3d.add(axes);
+
+            window.addEventListener('resize', () => {
+                const c = document.getElementById('viewerContainer');
+                camera3d.aspect = c.clientWidth / c.clientHeight;
+                camera3d.updateProjectionMatrix();
+                renderer3d.setSize(c.clientWidth, c.clientHeight);
+            });
+
+            (function animate() {
+                requestAnimationFrame(animate);
+                controls3d.update();
+                renderer3d.render(scene3d, camera3d);
+            })();
+
+            // defensive check
+            if (!THREE.OrbitControls) {
+                console.error('OrbitControls not loaded. Check that OrbitControls.js is included and same version as Three.js');
+            } else {
+                controls3d = new THREE.OrbitControls(camera3d, renderer3d.domElement);
+                controls3d.target.set(0, 0, 0);
+            }
+
+        }
+
+
+        // call init3D from main init
+        // ensure you call init3D() when page loads
+        // If you already have window.onload = init; in your file, add init3D() at end of init()
+        // e.g., function init() { ...; init3D(); }
+
+        // remove previous cloud
+        function clearCurrentCloud() {
+            if (!currentPointsObj) return;
+            scene3d.remove(currentPointsObj);
+            currentPointsObj.geometry.dispose();
+            currentPointsObj.material.dispose();
+            currentPointsObj = null;
+        }
+
+        // load PLY file from a server URL (relative path)
+        async function loadPLYUrl(url) {
+            const loader = new THREE.PLYLoader();
+            return new Promise((resolve, reject) => {
+                loader.load(url, function (geometry) {
+                    geometry.computeVertexNormals();
+                    const hasColor = geometry.attributes.color !== undefined;
+
+                    // ✅ Use MeshStandardMaterial instead of PointsMaterial
+                    let mat;
+                    if (hasColor) {
+                        mat = new THREE.MeshStandardMaterial({
+                            vertexColors: true,
+                            side: THREE.DoubleSide,
+                            flatShading: false,
+                            metalness: 0.1,
+                            roughness: 0.8
+                        });
+                    } else {
+                        mat = new THREE.MeshStandardMaterial({
+                            color: 0x6699ff,
+                            side: THREE.DoubleSide,
+                            flatShading: false,
+                            metalness: 0.1,
+                            roughness: 0.8
+                        });
+                    }
+
+                    // ✅ Create Mesh, not Points
+                    const mesh = new THREE.Mesh(geometry, mat);
+
+                    clearCurrentCloud();
+                    currentPointsObj = mesh;
+                    scene3d.add(mesh);
+
+                    // Better lighting for mesh visibility
+                    const light1 = new THREE.DirectionalLight(0xffffff, 1.2);
+                    light1.position.set(5, 10, 5);
+                    scene3d.add(light1);
+
+                    const light2 = new THREE.DirectionalLight(0xffffff, 0.8);
+                    light2.position.set(-5, -10, -5);
+                    scene3d.add(light2);
+
+                    const ambientLight = new THREE.AmbientLight(0x404040, 2);
+                    scene3d.add(ambientLight);
+
+                    geometry.computeBoundingBox();
+                    const bbox = geometry.boundingBox;
+                    if (bbox) {
+                        const center = new THREE.Vector3();
+                        bbox.getCenter(center);
+                        controls3d.target.copy(center);
+                        const size = bbox.getSize(new THREE.Vector3()).length();
+                        camera3d.position.set(center.x, center.y - size * 1.2, center.z + size * 0.6);
+                        camera3d.updateProjectionMatrix();
+                    }
+                    resolve({ points: geometry.attributes.position.count });
+                }, undefined, reject);
+            });
+        }
+
+        // upload file to backend and load returned processed file
+        // make sure this function is defined in the global script (same file)
+        async function uploadPointCloud(event) {
+            // defensive: ensure nothing tries to submit
+            if (event && typeof event.preventDefault === 'function') {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+            console.log('[UI] uploadPointCloud clicked');
+
+            const fileEl = document.getElementById('pcFile');
+            if (!fileEl || !fileEl.files || fileEl.files.length === 0) {
+                alert('Select a .ply file first');
+                return;
+            }
+            const file = fileEl.files[0];
+
+            const fd = new FormData();
+            fd.append('file', file);
+
+            try {
+                console.log('[UI] sending file to backend...');
+                const res = await fetch('http://127.0.0.1:8000/upload_pointcloud/', {
+                    method: 'POST',
+                    body: fd
+                });
+
+                if (!res.ok) {
+                    const t = await res.text();
+                    console.error('[UI] backend returned non-OK:', res.status, t);
+                    throw new Error(`${res.status} ${t}`);
+                }
+
+                const json = await res.json();
+                console.log('[UI] backend response:', json);
+
+                // backend returns: filename, points, slope_mean, slope_max, processed_url
+                document.getElementById('pcInfo').innerText =
+                    `Processed: ${json.filename} — points: ${json.points} (mean slope ${json.slope_mean.toFixed(2)}°)`;
+
+                // load processed file (use absolute URL to avoid path issues)
+                await loadPLYUrl(`http://127.0.0.1:8000${json.processed_url}`);
+            } catch (err) {
+                console.error('Upload/Process failed', err);
+                alert('Upload failed. Check server logs and console.');
+            }
+        }
+
+
+
+        // --- Reliable uploader (unique name) ---
+        async function uploadPlyAndProcess(file) {
+            console.log('[UI] uploadPlyAndProcess start', file && file.name);
+
+            if (!file) { alert('Select a .ply file first'); return; }
+            const fd = new FormData();
+            fd.append('file', file);
+
+            try {
+                console.log('[UI] sending file to backend...');
+                const res = await fetch('http://127.0.0.1:8000/upload_pointcloud/', {
+                    method: 'POST',
+                    body: fd,
+                });
+
+                if (!res.ok) {
+                    const text = await res.text().catch(() => '');
+                    console.error('[UI] backend error', res.status, text);
+                    alert('Server returned error: ' + res.status + ' — see console');
+                    return;
+                }
+
+                const json = await res.json();
+                console.log('[UI] backend response', json);
+
+                // safe-check keys (backend returns: filename, points, slope_mean, processed_url)
+                const filename = json.filename || json.processed_url || 'processed.ply';
+                const points = json.points ?? json.points_saved ?? 0;
+                const slopeMean = json.slope_mean ?? json.slope_mean_deg ?? null;
+                document.getElementById('pcInfo').innerText =
+                    `Processed: ${filename} — points: ${points}` + (slopeMean ? ` (mean slope ${slopeMean.toFixed(2)}°)` : '');
+
+                // load with existing loader function if available, otherwise try THREE.PLYLoader directly
+                const url = (json.processed_url && (json.processed_url.startsWith('http') ? json.processed_url : `http://127.0.0.1:8000${json.processed_url}`)) || filename;
+                if (typeof loadPLYUrl === 'function') {
+                    await loadPLYUrl(url);
+                } else {
+                    // fallback: try a small inline loader (if your page includes Three + PLYLoader)
+                    if (window.THREE && THREE.PLYLoader) {
+                        const loader = new THREE.PLYLoader();
+                        loader.load(url, function (geometry) {
+                            geometry.computeVertexNormals();
+                            const hasColor = geometry.attributes && geometry.attributes.color;
+                            const mat = new THREE.PointsMaterial({ size: 0.5, vertexColors: !!hasColor });
+                            const pts = new THREE.Points(geometry, mat);
+                            if (window.scene3d) {
+                                if (window.currentPointsObj) { window.scene3d.remove(window.currentPointsObj); }
+                                window.currentPointsObj = pts;
+                                window.scene3d.add(pts);
+                            }
+                        }, undefined, err => { console.error('PLY load fallback error', err); alert('PLY load failed (see console)'); });
+                    } else {
+                        console.warn('No loadPLYUrl and THREE.PLYLoader not present.');
+                    }
+                }
+            } catch (err) {
+                console.error('Upload/Process failed', err);
+                alert('Upload failed — check console for details');
+            }
+            const res = await fetch('http://127.0.0.1:8000/upload_pointcloud/', { method: 'POST', body: fd });
+            console.log('[UI] upload response status', res.status, res.headers.get('content-type'));
+            if (res.status >= 300 && res.status < 400) {
+                console.warn('Server returned redirect status — this could trigger navigation in some setups.');
+            }
+
+        }
+
+        document.getElementById("uploadImgBtn").addEventListener("click", async () => {
+            const file = document.getElementById("imgFile").files[0];
+            if (!file) {
+                alert("Please select an image first.");
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append("file", file);
+
+            try {
+                const response = await fetch("http://127.0.0.1:8000/upload_image/", {
+                    method: "POST",
+                    body: formData
+                });
+
+                const text = await response.text();
+                console.log("Raw response:", text);
+
+                // Try parsing as JSON, fallback to raw text if parse fails
+                let jsonFormatted;
+                try {
+                    const parsed = JSON.parse(text);
+                    jsonFormatted = JSON.stringify(parsed, null, 2); // indent for readability
+                } catch (err) {
+                    jsonFormatted = text; // backend didn’t return valid JSON
+                }
+
+                // ✅ Display the formatted JSON in <pre> block
+                document.getElementById("imgResult").innerHTML = `
+            <h3>📦 Backend JSON Response</h3>
+            <pre style="background:#111; color:#0f0; padding:10px; border-radius:6px; overflow-x:auto;">
+${jsonFormatted}
+            </pre>
+        `;
+
+                // If backend returned a processed image URL, show it below
+                try {
+                    const data = JSON.parse(text);
+                    if (data.processed_url) {
+                        const img = document.getElementById("processedImg");
+                        img.src = `http://127.0.0.1:8000${data.processed_url}`;
+                        img.style.display = "block";
+                    }
+                } catch (_) { /* ignore if parse fails */ }
+
+            } catch (err) {
+                console.error("Upload failed:", err);
+                alert("Upload failed — check console.");
+            }
+        });
+
+
+
+
+        // Batch processing - similar parsing but computes risk locally for speed (or you can call backend)
+        function processBatch() {
+            const f = document.getElementById('batchFile')?.files?.[0];
+            if (!f) { alert('Select batch CSV file'); return; }
+            const reader = new FileReader();
+            reader.onload = e => {
+                const lines = e.target.result.trim().split(/\r?\n/).filter(l => l.trim() !== '');
+                if (lines.length < 2) { alert('Need header + rows'); return; }
+                const rawHeaders = lines.shift().split(',').map(h => h.trim());
+                const headerMap = rawHeaders.map(h => ({ raw: h, key: mapHeaderToCanonical(h) || h.toLowerCase().replace(/\s+/g, '_') }));
+                batchResults = lines.map(line => {
+                    const cells = line.split(',').map(c => c.trim());
+                    const parsed = {}; headerMap.forEach((h, i) => parsed[h.key] = cells[i] ?? "");
+                    // heuristic local risk calc (same as earlier quick demo): scale to 0..1
+                    const depth = parseFloat(parsed.depth_m || parsed.depth || 0);
+                    const moisture = parseFloat(parsed.moisture_percent || parsed.moisture || 0);
+                    const slope = parseFloat(parsed.slope_angle_deg || parsed.slope || 0);
+                    const density = parseFloat(parsed.rock_density_gcm3 || parsed.density || 0);
+                    const seismic = parseInt(parsed.seismic_zone || parsed.seismic || 1);
+                    const pressure = parseFloat(parsed.pore_pressure_kPa || parsed.pore_pressure_kpa || parsed.pressure || 0);
+                    // simple weighted formula (demo)
+                    let score = (depth * 0.15 + moisture * 0.1 + slope * 0.3 + (density - 2.5) * 10 * 0.05 + seismic * 5 + pressure * 0.02);
+                    score = Math.max(0, Math.min(100, score)); // percent
+                    return { ...parsed, risk_percent: score.toFixed(1) };
+                });
+                displayBatchResults();
+            };
+            reader.readAsText(f);
+        }
+
+        function displayBatchResults() {
+            const container = document.getElementById('batchResults');
+            if (!container) return;
+            if (!batchResults || !batchResults.length) { container.innerHTML = '<p>No results</p>'; return; }
+            let html = '<table><thead><tr><th>#</th><th>Zone</th><th>Depth</th><th>Moisture</th><th>Slope</th><th>Density</th><th>Seismic</th><th>Pressure</th><th>Risk%</th></tr></thead><tbody>';
+            batchResults.forEach((r, i) => {
+                html += `<tr><td>${i + 1}</td><td>${r.zone || 'N/A'}</td><td>${r.depth_m || r.depth || ''}</td><td>${r.moisture_percent || r.moisture || ''}</td><td>${r.slope_angle_deg || r.slope || ''}</td><td>${r.rock_density_gcm3 || r.density || ''}</td><td>${r.seismic_zone || r.seismic || ''}</td><td>${r.pore_pressure_kPa || r.pressure || ''}</td><td>${r.risk_percent}</td></tr>`;
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        // emergency alert stub
+        function triggerEmergencyAlert(zone, risk) {
+            if (risk > 75) {
+                console.log(`🚨 ALERT: Zone ${zone} risk ${risk.toFixed(1)}%`);
+                // place to call backend alerts or Twilio / email
+            }
+        }
+
+        /* Helper: expose mapHeaderToCanonical for debugging (optional) */
+        function mapHeaderToCanonical(header) {
+            if (!header) return null;
+            const h = header.trim().toLowerCase();
+            // direct canonical match
+            for (const k of CANONICAL_KEYS) if (h === k.toLowerCase()) return k;
+            // search friendly variants inside paramKeyMap
+            for (const [friendly, list] of Object.entries(paramKeyMap)) {
+                for (const candidate of list) {
+                    if (candidate.toLowerCase() === h || h.includes(candidate.toLowerCase())) return list[0];
+                }
+            }
+            // partial contains
+            if (h.includes('depth')) return 'depth_m';
+            if (h.includes('moisture')) return 'moisture_percent';
+            if (h.includes('slope')) return 'slope_angle_deg';
+            if (h.includes('density') || h.includes('rock_density')) return 'rock_density_gcm3';
+            if (h.includes('seismic')) return 'seismic_zone';
+            if (h.includes('water') || h.includes('distance')) return 'distance_from_water_m';
+            if (h.includes('pressure') || h.includes('pore')) return 'pore_pressure_kPa';
+            if (h.includes('zone')) return 'zone';
+            return header.trim().toLowerCase().replace(/\s+/g, '_');
+        }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/PLYLoader.js"></script>
+
+
+    <script>
+        // Initialize
+        function init() {
+            createZoneTickMarks('A');
+            createZoneTickMarks('B');
+            createZoneTickMarks('C');
+            createZoneTickMarks('D');
+            createAvgTickMarks();
+
+            // Initialize with sample data
+            updateZoneWidget('A', 15);
+            updateZoneWidget('B', 35);
+            updateZoneWidget('C', 65);
+            updateZoneWidget('D', 85);
+            updateAvgRiskWidget(50);
+
+            init3D();
+        }
+
+        // Initialize when page loads
+        window.onload = init;
+    </script>
+</body>
+
+</html>

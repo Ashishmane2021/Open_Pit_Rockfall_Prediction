@@ -1,0 +1,7 @@
+depth_m,moisture_percent,slope_angle_deg,rock_density_gcm3,seismic_zone,distance_from_water_m,pore_pressure_kPa
+10,15,30,2.65,3,50,120
+20,18,35,2.70,4,40,150
+30,20,40,2.80,2,30,180
+15,12,25,2.60,1,60,100
+25,22,45,2.75,5,20,200
+35,25,50,2.85,3,10,250
